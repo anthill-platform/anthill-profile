@@ -77,7 +77,7 @@ class ProfileMeHandler(common.handler.AuthenticatedHandler):
         except AccessDenied:
             raise HTTPError(403, "Access denied")
         else:
-            self.write(json.dumps(profile))
+            self.dumps(profile)
 
     @coroutine
     @scoped(scopes=["profile_write"])
@@ -120,7 +120,7 @@ class ProfileMeHandler(common.handler.AuthenticatedHandler):
         except AccessDenied as e:
             raise HTTPError(403, e.message)
         else:
-            self.write(json.dumps(result))
+            self.dumps(result)
 
 
 class ProfileUserHandler(common.handler.AuthenticatedHandler):
@@ -140,7 +140,7 @@ class ProfileUserHandler(common.handler.AuthenticatedHandler):
         except NoSuchProfileError:
             raise HTTPError(404, "Profile was not found.")
         else:
-            self.write(json.dumps(profile))
+            self.dumps(profile)
 
     @coroutine
     @internal
@@ -170,4 +170,4 @@ class ProfileUserHandler(common.handler.AuthenticatedHandler):
         except AccessDenied as e:
             raise HTTPError(403, e.message)
         else:
-            self.write(json.dumps(result))
+            self.dumps(result)
