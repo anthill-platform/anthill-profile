@@ -52,6 +52,10 @@ class ProfileAccessModel(Model):
     def __init__(self, db):
         self.db = db
 
+    @coroutine
+    def setup_table_gamespace_access(self):
+        yield self.set_access(1, [], [], ["name", "avatar", "@time_updated", "@time_created"])
+
     def get_setup_tables(self):
         return ["gamespace_access"]
 
