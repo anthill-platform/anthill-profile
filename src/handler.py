@@ -54,6 +54,48 @@ class InternalHandler(object):
         else:
             raise Return(result)
 
+    @coroutine
+    def get_my_profile(self, gamespace_id, account_id, path=""):
+        profiles = self.application.profiles
+
+        path = filter(bool, path.split("/")) if path is not None else None
+
+        try:
+            result = yield profiles.get_profile_me(
+                gamespace_id,
+                account_id,
+                path)
+
+        except ProfileError as e:
+            raise InternalError(400, e.message)
+        except NoSuchProfileError:
+            raise InternalError(404, "No profile found")
+        except AccessDenied as e:
+            raise InternalError(403, e.message)
+        else:
+            raise Return(result)
+
+    @coroutine
+    def get_profile_others(self, gamespace_id, account_id, path=""):
+        profiles = self.application.profiles
+
+        path = filter(bool, path.split("/")) if path is not None else None
+
+        try:
+            result = yield profiles.get_profile_others(
+                gamespace_id,
+                account_id,
+                path)
+
+        except ProfileError as e:
+            raise InternalError(400, e.message)
+        except NoSuchProfileError:
+            raise InternalError(404, "No profile found")
+        except AccessDenied as e:
+            raise InternalError(403, e.message)
+        else:
+            raise Return(result)
+
 
 class ProfileMeHandler(common.handler.AuthenticatedHandler):
     @coroutine
