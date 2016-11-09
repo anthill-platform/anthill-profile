@@ -1,5 +1,5 @@
 import common.admin as a
-from common.internal import Internal
+from common.internal import Internal, InternalError
 import common.access
 import json
 
@@ -55,10 +55,7 @@ class GamespaceAccessController(a.AdminController):
             ])
         ]
 
-    def scopes_read(self):
-        return ["profile_admin"]
-
-    def scopes_write(self):
+    def access_scopes(self):
         return ["profile_admin"]
 
     @coroutine
@@ -112,10 +109,7 @@ class ProfileController(a.AdminController):
             ])
         ]
 
-    def scopes_read(self):
-        return ["profile_admin"]
-
-    def scopes_write(self):
+    def access_scopes(self):
         return ["profile_admin"]
 
     @coroutine
@@ -161,12 +155,8 @@ class ProfilesController(a.AdminController):
             ])
         ]
 
-    def scopes_read(self):
+    def access_scopes(self):
         return ["profile_admin"]
-
-    def scopes_write(self):
-        return ["profile_admin"]
-
     @coroutine
     def search_account(self, account):
         raise a.Redirect("profile", account=account)
@@ -203,9 +193,6 @@ class RootAdminController(a.AdminController):
             ])
         ]
 
-    def scopes_read(self):
-        return ["profile_admin"]
-
-    def scopes_write(self):
+    def access_scopes(self):
         return ["profile_admin"]
 
