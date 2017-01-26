@@ -51,7 +51,7 @@ class GamespaceAccessController(a.AdminController):
                 "update": a.method("Update", "primary")
             }, data=data),
             a.links("Navigate", [
-                a.link("@back", "Go back")
+                a.link("@back", "Go back", icon="chevron-left")
             ])
         ]
 
@@ -105,7 +105,7 @@ class ProfileController(a.AdminController):
                 "update": a.method("Update", "primary")
             }, data=data),
             a.links("Navigate", [
-                a.link("profiles", "Go back")
+                a.link("profiles", "Go back", icon="chevron-left")
             ])
         ]
 
@@ -151,7 +151,7 @@ class ProfilesController(a.AdminController):
                 }, data=data)
             ]),
             a.links("Navigate", [
-                a.link("index", "Go back")
+                a.link("index", "Go back", icon="chevron-left")
             ])
         ]
 
