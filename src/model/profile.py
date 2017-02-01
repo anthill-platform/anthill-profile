@@ -1,5 +1,4 @@
 
-import json
 import common.access
 import common.profile
 
@@ -8,6 +7,9 @@ from tornado.gen import coroutine, Return
 from access import ProfileAccessModel
 from common.profile import ProfileError
 from common.model import Model
+
+import ujson
+
 
 __author__ = "desertkun"
 
@@ -227,7 +229,7 @@ class ProfilesModel(Model):
 class UserProfile(common.profile.DatabaseProfile):
     @staticmethod
     def __encode_profile__(profile):
-        return json.dumps(profile)
+        return ujson.dumps(profile)
 
     def __init__(self, db, gamespace_id, account_id):
         super(UserProfile, self).__init__(db)
