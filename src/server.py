@@ -50,7 +50,8 @@ class ProfileServer(common.server.Server):
     def get_handlers(self):
         return [
             (r"/profile/me/?([\w/]*)", handler.ProfileMeHandler),
-            (r"/profile/([\w]+)/?([\w/]*)", handler.ProfileUserHandler)
+            (r"/profile/([\w]+)/?([\w/]*)", handler.ProfileUserHandler),
+            (r"/profiles", handler.MassProfileUsersHandler)
         ]
 
     def get_internal_handler(self):

@@ -1,13 +1,15 @@
 
 import common.handler
 import common.access
-import json
+import ujson
 
 from tornado.gen import coroutine, Return
 from tornado.web import HTTPError
 
 from common.access import scoped, internal
 from common.internal import InternalError
+from common.validate import validate_value, ValidationError
+
 from model.profile import NoSuchProfileError, ProfileError
 from model.access import AccessDenied
 
@@ -135,7 +137,7 @@ class ProfileMeHandler(common.handler.AuthenticatedHandler):
         path = filter(bool, path.split("/")) if path is not None else None
 
         try:
-            fields = json.loads(self.get_argument("data"))
+            fields = ujson.loads(self.get_argument("data"))
         except (KeyError, ValueError):
             raise HTTPError(400, "Corrupted 'data' field: expecting JSON object.")
 
@@ -195,7 +197,7 @@ class ProfileUserHandler(common.handler.AuthenticatedHandler):
         path = filter(bool, path.split("/")) if path is not None else None
 
         try:
-            fields = json.loads(self.get_argument("data"))
+            fields = ujson.loads(self.get_argument("data"))
         except (KeyError, ValueError):
             raise HTTPError(400, "Corrupted 'data' field: expecting JSON object.")
 
@@ -213,3 +215,44 @@ class ProfileUserHandler(common.handler.AuthenticatedHandler):
             raise HTTPError(403, e.message)
         else:
             self.dumps(result)
+
+
+class MassProfileUsersHandler(common.handler.AuthenticatedHandler):
+    @coroutine
+    @scoped(scopes=["profile"])
+    def get(self):
+
+        try:
+            accounts = ujson.loads(self.get_argument("accounts"))
+        except (KeyError, ValueError):
+            raise HTTPError(400, "Corrupted 'accounts' field.")
+
+        try:
+            accounts = validate_value(accounts, "json_list_of_ints")
+        except ValidationError as e:
+            raise HTTPError(400, e.message)
+
+        profile_fields = self.get_argument("profile_fields", None)
+
+        if profile_fields:
+
+            try:
+                profile_fields = ujson.loads(profile_fields)
+                profile_fields = validate_value(profile_fields, "json_list_of_strings")
+            except (KeyError, ValueError, ValidationError):
+                raise HTTPError(400, "Corrupted profile_fields")
+
+        if len(accounts) > 100:
+            raise HTTPError(400, "To many accounts to request.")
+
+        profiles_data = self.application.profiles
+        gamespace_id = self.current_user.token.get(common.access.AccessToken.GAMESPACE)
+
+        try:
+            profiles = yield profiles_data.get_profiles(
+                gamespace_id, "get_public", [str(account) for account in accounts],
+                profile_fields or [])
+        except ProfileError as e:
+            raise HTTPError(400, "Failed to get profiles: " + e.message)
+        else:
+            self.dumps(profiles)
