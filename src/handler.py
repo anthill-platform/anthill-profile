@@ -113,8 +113,13 @@ class ProfileMeHandler(common.handler.AuthenticatedHandler):
 
         path = filter(bool, path.split("/")) if path is not None else None
 
+        if self.token.has_scope("profile_private"):
+            method = profiles.get_profile_data
+        else:
+            method = profiles.get_profile_me
+
         try:
-            profile = yield profiles.get_profile_me(gamespace_id, account_id, path)
+            profile = yield method(gamespace_id, account_id, path)
 
         except NoSuchProfileError:
             raise HTTPError(404, "Profile was not found.")
