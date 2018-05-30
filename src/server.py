@@ -37,12 +37,13 @@ class ProfileServer(common.server.Server):
             "index": admin.RootAdminController,
             "access": admin.GamespaceAccessController,
             "profiles": admin.ProfilesController,
-            "profile": admin.ProfileController
+            "profile": admin.ProfileController,
+            "query": admin.QueryProfilesController
         }
 
     def get_metadata(self):
         return {
-            "title": "User profiles",
+            "title": "User Profiles",
             "description": "Manage the profiles of the users",
             "icon": "user"
         }

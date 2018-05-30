@@ -10,7 +10,7 @@ from common.access import scoped, internal
 from common.internal import InternalError
 from common.validate import validate_value, ValidationError
 
-from model.profile import NoSuchProfileError, ProfileError
+from model.profile import NoSuchProfileError, ProfileError, ProfileQueryError
 from model.access import AccessDenied
 
 
@@ -97,6 +97,29 @@ class InternalHandler(object):
             raise InternalError(403, e.message)
         else:
             raise Return(result)
+
+    @coroutine
+    def query_profiles(self, gamespace_id, query, limit=1000):
+        profiles = self.application.profiles
+
+        q = profiles.profile_query(gamespace_id)
+        q.filters = query
+        q.limit = limit
+
+        try:
+            results, count = yield q.query(count=True)
+        except ProfileQueryError as e:
+            raise InternalError(500, e.message)
+
+        raise Return({
+            "results": {
+                r.account: {
+                    "profile": r.profile
+                }
+                for r in results
+            },
+            "total_count": count
+        })
 
 
 class ProfileMeHandler(common.handler.AuthenticatedHandler):

@@ -1,12 +1,13 @@
 import common.admin as a
 from common.internal import Internal, InternalError
+from common.validate import validate
 import common.access
 import json
 
 from tornado.gen import coroutine, Return
 
 from model.access import NoAccessData
-from model.profile import ProfileError, NoSuchProfileError
+from model.profile import ProfileError, NoSuchProfileError, ProfileQueryError
 
 
 class GamespaceAccessController(a.AdminController):
@@ -157,10 +158,121 @@ class ProfilesController(a.AdminController):
 
     def access_scopes(self):
         return ["profile_admin"]
+
     @coroutine
     def search_account(self, account):
         raise a.Redirect("profile", account=account)
 
+    @coroutine
+    def search_credential(self, credential):
+
+        internal = Internal()
+
+        try:
+            account = yield internal.request(
+                "login",
+                "get_account",
+                credential=credential)
+
+        except InternalError as e:
+            if e.code == 400:
+                raise a.ActionError("Failed to find credential: bad username")
+            if e.code == 404:
+                raise a.ActionError("Failed to find credential: no such user")
+
+            raise a.ActionError(e.body)
+
+        raise a.Redirect("profile", account=account["id"])
+
+
+class QueryProfilesController(a.AdminController):
+    def render(self, data):
+        r = [
+            a.breadcrumbs([], "Query User Profiles")
+        ]
+
+        results = data.get("results", None)
+        if results is not None:
+            r.extend([
+                a.content(
+                    "Query Results: Found {0} profile(s)".format(data.get("count", 0)),
+                    [
+                        {
+                            "id": "account_id",
+                            "title": "Account"
+                        },
+                        {
+                            "id": "profile",
+                            "title": "Profile Object"
+                        }
+                    ],
+                    [
+                        {
+                            "account_id": [
+                                a.link("profile", result.account, icon="user", account=result.account)
+                            ],
+                            "profile": [
+                                a.json_view(result.profile)
+                            ],
+                        } for result in data["results"]
+                    ],
+                    "default", empty="Query yielded no results"
+                )
+            ])
+
+        r.extend([
+            a.form(title="Query", fields={
+                "query": a.field("Profile Search Query", "json", "primary", "non-empty", height=200,
+                                 description="""
+                                            Please read <a href="https://docs.anthillplatform.org/en/latest/other/dbquery.html" target="_blank">this document</a>
+                                            for the query format.
+                                         """),
+            }, methods={
+                "do_query": a.method("Search", "primary")
+            }, data=data),
+            a.links("Navigate", [
+                a.link("index", "Go back", icon="chevron-left")
+            ])
+        ])
+
+        return r
+
+    @coroutine
+    @validate(query="load_json_dict")
+    def do_query(self, query):
+
+        if not query:
+            raise a.ActionError("Query cannot be an empty object")
+
+        profiles = self.application.profiles
+
+        q = profiles.profile_query(self.gamespace)
+        q.filters = query
+        q.limit = 1000
+
+        try:
+            results, count = yield q.query(count=True)
+        except ProfileQueryError as e:
+            raise a.ActionError(e.message)
+
+        raise Return({
+            "results": results,
+            "count": count,
+            "query": query
+        })
+
+    @coroutine
+    def get(self):
+        raise Return({
+            "query": {}
+        })
+
+    def access_scopes(self):
+        return ["profile_admin"]
+
+    @coroutine
+    def search_account(self, account):
+        raise a.Redirect("profile", account=account)
 
     @coroutine
     def search_credential(self, credential):
@@ -188,8 +300,9 @@ class RootAdminController(a.AdminController):
     def render(self, data):
         return [
             a.links("Profile service", [
-                a.link("profiles", "Edit user profiles", icon="user"),
-                a.link("access", "Edit profile access", icon="lock")
+                a.link("profiles", "Edit User Profiles", icon="user"),
+                a.link("query", "Query User Profiles", icon="search"),
+                a.link("access", "Edit Profile Access", icon="lock")
             ])
         ]
 

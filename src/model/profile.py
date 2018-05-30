@@ -7,6 +7,7 @@ from tornado.gen import coroutine, Return
 from access import ProfileAccessModel
 from common.profile import ProfileError
 from common.model import Model
+from common.database import DatabaseError, format_conditions_json, ConditionError
 
 import ujson
 
@@ -16,6 +17,99 @@ __author__ = "desertkun"
 
 class NoSuchProfileError(Exception):
     pass
+
+
+class ProfileQueryError(Exception):
+    pass
+
+
+class ProfileAdapter(object):
+    def __init__(self, data):
+        self.account = str(data.get("account_id"))
+        self.profile = data.get("payload")
+
+
+class ProfileQuery(object):
+    def __init__(self, gamespace_id, db):
+        self.gamespace_id = gamespace_id
+        self.db = db
+
+        self.filters = None
+
+        self.offset = 0
+        self.limit = 0
+
+    def __values__(self):
+        conditions = [
+            "`account_profiles`.`gamespace_id`=%s"
+        ]
+
+        data = [
+            str(self.gamespace_id)
+        ]
+
+        if self.filters:
+            for condition, values in format_conditions_json('payload', self.filters):
+                conditions.append(condition)
+                data.extend(values)
+
+        return conditions, data
+
+    @coroutine
+    def query(self, one=False, count=False):
+        try:
+            conditions, data = self.__values__()
+        except ConditionError:
+            raise ProfileQueryError("Failed to process profile conditions")
+
+        query = """
+            SELECT {0} `account_id`, `payload` FROM `account_profiles`
+            WHERE {1}
+        """.format(
+            "SQL_CALC_FOUND_ROWS" if count else "",
+            " AND ".join(conditions))
+
+        if self.limit:
+            query += """
+                LIMIT %s,%s
+            """
+
+            data.append(int(self.offset))
+            data.append(int(self.limit))
+
+        query += ";"
+
+        if one:
+            try:
+                result = yield self.db.get(query, *data)
+            except DatabaseError as e:
+                raise ProfileQueryError("Failed to get profiles: " + e.args[1])
+
+            if not result:
+                raise Return(None)
+
+            raise Return(ProfileAdapter(result))
+        else:
+            try:
+                result = yield self.db.query(query, *data)
+            except DatabaseError as e:
+                raise ProfileQueryError("Failed to query profiles: " + e.args[1])
+
+            count_result = 0
+
+            if count:
+                count_result = yield self.db.get(
+                    """
+                        SELECT FOUND_ROWS() AS count;
+                    """)
+                count_result = count_result["count"]
+
+            items = map(ProfileAdapter, result)
+
+            if count:
+                raise Return((items, count_result))
+
+            raise Return(items)
 
 
 class ProfilesModel(Model):
@@ -32,6 +126,24 @@ class ProfilesModel(Model):
     def get_setup_db(self):
         return self.db
 
+    def has_delete_account_event(self):
+        return True
+
+    @coroutine
+    def accounts_deleted(self, gamespace, accounts, gamespace_only):
+        if gamespace_only:
+            yield self.db.execute(
+                """
+                    DELETE FROM `account_profiles`
+                    WHERE `gamespace_id`=%s AND `account_id` IN %s;
+                """, gamespace, accounts)
+        else:
+            yield self.db.execute(
+                """
+                    DELETE FROM `account_profiles`
+                    WHERE `account_id` IN %s;
+                """, accounts)
+
     @coroutine
     def delete_profile(self, gamespace_id, account_id):
         yield self.db.execute(
@@ -39,6 +151,9 @@ class ProfilesModel(Model):
                 DELETE FROM `account_profiles`
                 WHERE `account_id`=%s AND `gamespace_id`=%s;
             """, account_id, gamespace_id)
+
+    def profile_query(self, gamespace_id):
+        return ProfileQuery(gamespace_id, self.db)
 
     @coroutine
     def get_profile_data(self, gamespace_id, account_id, path):
