@@ -1,18 +1,12 @@
 
-import common.access
-import common.profile
+from . access import ProfileAccessModel
 
-from tornado.gen import coroutine, Return
-
-from access import ProfileAccessModel
-from common.profile import ProfileError
-from common.model import Model
-from common.database import DatabaseError, format_conditions_json, ConditionError
+from anthill.common import access, profile
+from anthill.common.profile import ProfileError, FuncError, NoDataError
+from anthill.common.model import Model
+from anthill.common.database import DatabaseError, format_conditions_json, ConditionError
 
 import ujson
-
-
-__author__ = "desertkun"
 
 
 class NoSuchProfileError(Exception):
@@ -55,8 +49,7 @@ class ProfileQuery(object):
 
         return conditions, data
 
-    @coroutine
-    def query(self, one=False, count=False):
+    async def query(self, one=False, count=False):
         try:
             conditions, data = self.__values__()
         except ConditionError:
@@ -81,24 +74,24 @@ class ProfileQuery(object):
 
         if one:
             try:
-                result = yield self.db.get(query, *data)
+                result = await self.db.get(query, *data)
             except DatabaseError as e:
                 raise ProfileQueryError("Failed to get profiles: " + e.args[1])
 
             if not result:
-                raise Return(None)
+                return None
 
-            raise Return(ProfileAdapter(result))
+            return ProfileAdapter(result)
         else:
             try:
-                result = yield self.db.query(query, *data)
+                result = await self.db.query(query, *data)
             except DatabaseError as e:
                 raise ProfileQueryError("Failed to query profiles: " + e.args[1])
 
             count_result = 0
 
             if count:
-                count_result = yield self.db.get(
+                count_result = await self.db.get(
                     """
                         SELECT FOUND_ROWS() AS count;
                     """)
@@ -107,15 +100,16 @@ class ProfileQuery(object):
             items = map(ProfileAdapter, result)
 
             if count:
-                raise Return((items, count_result))
+                return items, count_result
 
-            raise Return(items)
+            return items
 
 
 class ProfilesModel(Model):
     TIME_CREATED = "@time_created"
     TIME_UPDATED = "@time_updated"
 
+    # noinspection PyShadowingNames
     def __init__(self, db, access):
         self.db = db
         self.access = access
@@ -129,24 +123,22 @@ class ProfilesModel(Model):
     def has_delete_account_event(self):
         return True
 
-    @coroutine
-    def accounts_deleted(self, gamespace, accounts, gamespace_only):
+    async def accounts_deleted(self, gamespace, accounts, gamespace_only):
         if gamespace_only:
-            yield self.db.execute(
+            await self.db.execute(
                 """
                     DELETE FROM `account_profiles`
                     WHERE `gamespace_id`=%s AND `account_id` IN %s;
                 """, gamespace, accounts)
         else:
-            yield self.db.execute(
+            await self.db.execute(
                 """
                     DELETE FROM `account_profiles`
                     WHERE `account_id` IN %s;
                 """, accounts)
 
-    @coroutine
-    def delete_profile(self, gamespace_id, account_id):
-        yield self.db.execute(
+    async def delete_profile(self, gamespace_id, account_id):
+        await self.db.execute(
             """
                 DELETE FROM `account_profiles`
                 WHERE `account_id`=%s AND `gamespace_id`=%s;
@@ -155,29 +147,26 @@ class ProfilesModel(Model):
     def profile_query(self, gamespace_id):
         return ProfileQuery(gamespace_id, self.db)
 
-    @coroutine
-    def get_profile_data(self, gamespace_id, account_id, path):
-
-        profile = UserProfile(
+    async def get_profile_data(self, gamespace_id, account_id, path):
+        user_profile = UserProfile(
             self.db,
             gamespace_id,
             account_id)
 
         try:
-            data = yield profile.get_data(path)
-        except common.profile.NoDataError:
+            data = await user_profile.get_data(path)
+        except NoDataError:
             raise NoSuchProfileError()
 
-        raise Return(data)
+        return data
 
-    @coroutine
-    def get_profile_me(self, gamespace_id, account_id, path):
+    async def get_profile_me(self, gamespace_id, account_id, path):
         
-        profile_data = yield self.get_profile_data(gamespace_id, account_id, path)
+        profile_data = await self.get_profile_data(gamespace_id, account_id, path)
 
         if not path:
             # if the path is not specified, get them all
-            valid_keys = yield self.access.validate_access(
+            valid_keys = await self.access.validate_access(
                 gamespace_id,
                 profile_data.keys(),
                 ProfileAccessModel.READ)
@@ -189,7 +178,7 @@ class ProfilesModel(Model):
         else:
 
             key = path[0]
-            valid_keys = yield self.access.validate_access(
+            valid_keys = await self.access.validate_access(
                 gamespace_id,
                 [key],
                 ProfileAccessModel.READ)
@@ -199,16 +188,15 @@ class ProfilesModel(Model):
             else:
                 result = None
 
-        raise Return(result)
+        return result
 
-    @coroutine
-    def get_profile_others(self, gamespace_id, account_id, path):
+    async def get_profile_others(self, gamespace_id, account_id, path):
         
-        profile_data = yield self.get_profile_data(gamespace_id, account_id, path)
+        profile_data = await self.get_profile_data(gamespace_id, account_id, path)
 
         if not path:
             # if the path is not specified, get them all
-            valid_keys = yield self.access.validate_access(
+            valid_keys = await self.access.validate_access(
                 gamespace_id,
                 profile_data.keys(),
                 ProfileAccessModel.READ_OTHERS)
@@ -219,7 +207,7 @@ class ProfilesModel(Model):
             }
         else:
             key = path[0]
-            valid_keys = yield self.access.validate_access(
+            valid_keys = await self.access.validate_access(
                 gamespace_id,
                 [key],
                 ProfileAccessModel.READ_OTHERS)
@@ -229,18 +217,16 @@ class ProfilesModel(Model):
             else:
                 result = None
 
-        raise Return(result)
+        return result
 
-    @coroutine
-    def get_profiles(self, gamespace_id, action, account_ids, profile_fields):
+    async def get_profiles(self, gamespace_id, action, account_ids, profile_fields):
 
-        @coroutine
-        def get_private():
+        async def get_private():
 
             result = {}
 
             for account_id in account_ids:
-                data = (yield self.get_profile_data(gamespace_id, account_id, [])) or {}
+                data = (await self.get_profile_data(gamespace_id, account_id, [])) or {}
 
                 if profile_fields:
                     result[account_id] = {
@@ -250,25 +236,22 @@ class ProfilesModel(Model):
                 else:
                     result[account_id] = data
 
-            raise Return(result)
+            return result
 
-        @coroutine
-        def get_public():
+        async def get_public():
 
             if profile_fields:
-                valid_fields = yield self.access.validate_access(
-                    gamespace_id,
-                    profile_fields,
-                    ProfileAccessModel.READ_OTHERS)
+                valid_fields = await self.access.validate_access(gamespace_id, profile_fields,
+                                                                 ProfileAccessModel.READ_OTHERS)
             else:
-                access = yield self.access.get_access(gamespace_id)
-                valid_fields = access.get_public()
+                public_access = await self.access.get_access(gamespace_id)
+                valid_fields = public_access.get_public()
 
             result = {}
 
             for account_id in account_ids:
                 try:
-                    data = (yield self.get_profile_data(gamespace_id, account_id, []))
+                    data = (await self.get_profile_data(gamespace_id, account_id, []))
                 except NoSuchProfileError:
                     data = {}
                 result[account_id] = {
@@ -276,7 +259,7 @@ class ProfilesModel(Model):
                     for field in valid_fields if field in data
                 }
 
-            raise Return(result)
+            return result
 
         actions = {
             "get_private": get_private,
@@ -285,63 +268,48 @@ class ProfilesModel(Model):
 
         if action not in actions:
             raise ProfileError("No such profile action: " + action)
-
         if len(account_ids) > 1000:
             raise ProfileError("Maximum account limit exceeded (1000).")
+        profiles = await actions[action]()
+        return profiles
 
-        profiles = yield actions[action]()
-
-        raise Return(profiles)
-
-    @coroutine
-    def set_profile_data(self, gamespace_id, account_id, fields, path, merge=True):
-
-        profile = UserProfile(
-            self.db,
-            gamespace_id,
-            account_id)
-
+    async def set_profile_data(self, gamespace_id, account_id, fields, path, merge=True):
+        user_profile = UserProfile(self.db, gamespace_id, account_id)
         try:
-            result = yield profile.set_data(
-                fields,
-                path,
-                merge=merge)
-
-        except common.profile.FuncError as e:
+            result = await user_profile.set_data(fields, path, merge=merge)
+        except FuncError as e:
             raise ProfileError("Failed to update profie: " + e.message)
+        return result
 
-        raise Return(result)
-
-    @coroutine
-    def set_profile_me(self, gamespace_id, account_id, fields, path, merge=True):
+    async def set_profile_me(self, gamespace_id, account_id, fields, path, merge=True):
 
         if not path:
-            yield self.access.validate_access(
+            await self.access.validate_access(
                 gamespace_id,
                 fields.keys(),
                 ProfileAccessModel.WRITE)
 
-            result = yield self.set_profile_data(gamespace_id, account_id, fields, path, merge=merge)
+            result = await self.set_profile_data(gamespace_id, account_id, fields, path, merge=merge)
         else:
             key = path[0]
-            yield self.access.validate_access(
+            await self.access.validate_access(
                 gamespace_id,
                 [key],
                 ProfileAccessModel.WRITE)
 
-            result = yield self.set_profile_data(gamespace_id, account_id, fields, path, merge=merge)
+            result = await self.set_profile_data(gamespace_id, account_id, fields, path, merge=merge)
 
-        raise Return(result)
+        return result
 
-    @coroutine
-    def set_profile_rw(self, gamespace_id, account_id, fields, path, merge=True):
+    async def set_profile_rw(self, gamespace_id, account_id, fields, path, merge=True):
 
-        result = yield self.set_profile_data(gamespace_id, account_id, fields, path, merge=merge)
+        result = await self.set_profile_data(gamespace_id, account_id, fields, path, merge=merge)
 
-        raise Return(result)
+        return result
 
 
-class UserProfile(common.profile.DatabaseProfile):
+class UserProfile(profile.DatabaseProfile):
+    # noinspection PyShadowingNames
     @staticmethod
     def __encode_profile__(profile):
         return ujson.dumps(profile)
@@ -351,20 +319,21 @@ class UserProfile(common.profile.DatabaseProfile):
         self.gamespace_id = gamespace_id
         self.account_id = account_id
 
+    # noinspection PyShadowingNames
     @staticmethod
     def __parse_profile__(profile):
         return profile
 
+    # noinspection PyShadowingNames
     @staticmethod
     def __process_dates__(profile):
         if ProfilesModel.TIME_CREATED not in profile:
-            profile[ProfilesModel.TIME_CREATED] = common.access.utc_time()
+            profile[ProfilesModel.TIME_CREATED] = access.utc_time()
 
-        profile[ProfilesModel.TIME_UPDATED] = common.access.utc_time()
+        profile[ProfilesModel.TIME_UPDATED] = access.utc_time()
 
-    @coroutine
-    def get(self):
-        user = yield self.conn.get(
+    async def get(self):
+        user = await self.conn.get(
             """
                 SELECT `payload`
                 FROM `account_profiles`
@@ -373,27 +342,25 @@ class UserProfile(common.profile.DatabaseProfile):
             """, self.account_id, self.gamespace_id)
 
         if user:
-            raise Return(UserProfile.__parse_profile__(user["payload"]))
+            return UserProfile.__parse_profile__(user["payload"])
 
-        raise common.profile.NoDataError()
+        raise profile.NoDataError()
 
-    @coroutine
-    def insert(self, data):
+    async def insert(self, data):
         UserProfile.__process_dates__(data)
         data = UserProfile.__encode_profile__(data)
 
-        yield self.conn.insert(
+        await self.conn.insert(
             """
                 INSERT INTO `account_profiles`
                 (`account_id`, `gamespace_id`, `payload`)
                 VALUES (%s, %s, %s);
             """, self.account_id, self.gamespace_id, data)
 
-    @coroutine
-    def update(self, data):
+    async def update(self, data):
         UserProfile.__process_dates__(data)
         encoded = UserProfile.__encode_profile__(data)
-        yield self.conn.execute(
+        await self.conn.execute(
             """
                 UPDATE `account_profiles`
                 SET `payload`=%s

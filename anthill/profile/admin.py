@@ -1,23 +1,22 @@
-import common.admin as a
-from common.internal import Internal, InternalError
-from common.validate import validate
-import common.access
+
+import anthill.common.admin as a
+from anthill.common.internal import Internal, InternalError
+from anthill.common.validate import validate
+from anthill.common import access
+
+from . model.access import NoAccessData
+from . model.profile import ProfileError, NoSuchProfileError, ProfileQueryError
+
 import json
-
-from tornado.gen import coroutine, Return
-
-from model.access import NoAccessData
-from model.profile import ProfileError, NoSuchProfileError, ProfileQueryError
 
 
 class GamespaceAccessController(a.AdminController):
-    @coroutine
-    def get(self):
+    async def get(self):
 
         access_data = self.application.access
 
         try:
-            access = yield access_data.get_access(self.gamespace)
+            access = await access_data.get_access(self.gamespace)
         except NoAccessData:
             access_private = ""
             access_public = ""
@@ -33,7 +32,7 @@ class GamespaceAccessController(a.AdminController):
             "access_protected": access_protected
         }
 
-        raise a.Return(result)
+        return result
 
     def render(self, data):
         return [
@@ -59,12 +58,11 @@ class GamespaceAccessController(a.AdminController):
     def access_scopes(self):
         return ["profile_admin"]
 
-    @coroutine
-    def update(self, access_private, access_public, access_protected):
+    async def update(self, access_private, access_public, access_protected):
 
         access_data = self.application.access
 
-        yield access_data.set_access(self.gamespace,
+        await access_data.set_access(self.gamespace,
                                      access_private.split(","),
                                      access_protected.split(","),
                                      access_public.split(","))
@@ -75,17 +73,16 @@ class GamespaceAccessController(a.AdminController):
             "access_protected": access_protected
         }
 
-        raise a.Return(result)
+        return result
 
 
 class ProfileController(a.AdminController):
-    @coroutine
-    def get(self, account):
+    async def get(self, account):
 
         profiles = self.application.profiles
 
         try:
-            profile = (yield profiles.get_profile_data(self.gamespace, account, None))
+            profile = (await profiles.get_profile_data(self.gamespace, account, None))
         except NoSuchProfileError:
             profile = {}
 
@@ -93,7 +90,7 @@ class ProfileController(a.AdminController):
             "profile": profile
         }
 
-        raise a.Return(result)
+        return result
 
     def render(self, data):
         return [
@@ -113,8 +110,7 @@ class ProfileController(a.AdminController):
     def access_scopes(self):
         return ["profile_admin"]
 
-    @coroutine
-    def update(self, profile):
+    async def update(self, profile):
 
         try:
             profile = json.loads(profile)
@@ -125,7 +121,7 @@ class ProfileController(a.AdminController):
         account_id = self.context.get("account")
 
         try:
-            yield profiles.set_profile_data(self.gamespace, account_id, profile, None, merge=False)
+            await profiles.set_profile_data(self.gamespace, account_id, profile, None, merge=False)
         except ProfileError as e:
             raise a.ActionError(e.message)
 
@@ -159,17 +155,15 @@ class ProfilesController(a.AdminController):
     def access_scopes(self):
         return ["profile_admin"]
 
-    @coroutine
-    def search_account(self, account):
+    async def search_account(self, account):
         raise a.Redirect("profile", account=account)
 
-    @coroutine
-    def search_credential(self, credential):
+    async def search_credential(self, credential):
 
         internal = Internal()
 
         try:
-            account = yield internal.request(
+            account = await internal.request(
                 "login",
                 "get_account",
                 credential=credential)
@@ -237,9 +231,8 @@ class QueryProfilesController(a.AdminController):
 
         return r
 
-    @coroutine
     @validate(query="load_json_dict")
-    def do_query(self, query):
+    async def do_query(self, query):
 
         if not query:
             raise a.ActionError("Query cannot be an empty object")
@@ -251,36 +244,33 @@ class QueryProfilesController(a.AdminController):
         q.limit = 1000
 
         try:
-            results, count = yield q.query(count=True)
+            results, count = await q.query(count=True)
         except ProfileQueryError as e:
-            raise a.ActionError(e.message)
+            raise a.ActionError(str(e))
 
-        raise Return({
+        return {
             "results": results,
             "count": count,
             "query": query
-        })
+        }
 
-    @coroutine
-    def get(self):
-        raise Return({
+    async def get(self):
+        return {
             "query": {}
-        })
+        }
 
     def access_scopes(self):
         return ["profile_admin"]
 
-    @coroutine
-    def search_account(self, account):
+    async def search_account(self, account):
         raise a.Redirect("profile", account=account)
 
-    @coroutine
-    def search_credential(self, credential):
+    async def search_credential(self, credential):
 
         internal = Internal()
 
         try:
-            account = yield internal.request(
+            account = await internal.request(
                 "login",
                 "get_account",
                 credential=credential)
@@ -308,4 +298,3 @@ class RootAdminController(a.AdminController):
 
     def access_scopes(self):
         return ["profile_admin"]
-

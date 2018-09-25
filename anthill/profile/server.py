@@ -1,26 +1,20 @@
 
-from common.options import options
+from anthill.common.options import options
+from anthill.common import server, database, access
 
-import common.server
-import common.database
-import common.access
-import common.sign
-import common.keyvalue
-
-from model.profile import ProfilesModel
-from model.access import ProfileAccessModel
-
-import admin
-import handler
-import options as _opts
+from . model.profile import ProfilesModel
+from . model.access import ProfileAccessModel
+from . import handler as h
+from . import options as _opts
+from . import admin
 
 
-class ProfileServer(common.server.Server):
+class ProfileServer(server.Server):
     # noinspection PyShadowingNames
     def __init__(self):
         super(ProfileServer, self).__init__()
 
-        self.db = common.database.Database(
+        self.db = database.Database(
             host=options.db_host,
             database=options.db_name,
             user=options.db_username,
@@ -50,16 +44,16 @@ class ProfileServer(common.server.Server):
 
     def get_handlers(self):
         return [
-            (r"/profile/me/?([\w/]*)", handler.ProfileMeHandler),
-            (r"/profile/([\w]+)/?([\w/]*)", handler.ProfileUserHandler),
-            (r"/profiles", handler.MassProfileUsersHandler)
+            (r"/profile/me/?([\w/]*)", h.ProfileMeHandler),
+            (r"/profile/([\w]+)/?([\w/]*)", h.ProfileUserHandler),
+            (r"/profiles", h.MassProfileUsersHandler)
         ]
 
     def get_internal_handler(self):
-        return handler.InternalHandler(self)
+        return h.InternalHandler(self)
 
 
 if __name__ == "__main__":
-    stt = common.server.init()
-    common.access.AccessToken.init([common.access.public()])
-    common.server.start(ProfileServer)
+    stt = server.init()
+    access.AccessToken.init([access.public()])
+    server.start(ProfileServer)

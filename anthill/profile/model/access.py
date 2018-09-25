@@ -1,6 +1,5 @@
 
-from tornado.gen import coroutine, Return
-from common.model import Model
+from anthill.common.model import Model
 
 __author__ = "desertkun"
 
@@ -34,10 +33,9 @@ class ProfileAccessModel(Model):
     READ_OTHERS = 1
     WRITE = 2
 
-    @coroutine
-    def __get_access_data__(self, gamespace_id):
+    async def __get_access_data__(self, gamespace_id):
 
-        access = yield self.db.get(
+        access = await self.db.get(
             """
                 SELECT * 
                 FROM `gamespace_access`
@@ -47,14 +45,13 @@ class ProfileAccessModel(Model):
         if access is None:
             raise NoAccessData()
 
-        raise Return(AccessAdapter(access))
+        return AccessAdapter(access)
 
     def __init__(self, db):
         self.db = db
 
-    @coroutine
-    def setup_table_gamespace_access(self):
-        yield self.set_access(1, [], [], ["name", "avatar", "@time_updated", "@time_created"])
+    async def setup_table_gamespace_access(self):
+        await self.set_access(1, [], [], ["name", "avatar", "@time_updated", "@time_created"])
 
     def get_setup_tables(self):
         return ["gamespace_access"]
@@ -62,27 +59,25 @@ class ProfileAccessModel(Model):
     def get_setup_db(self):
         return self.db
 
-    @coroutine
-    def get_access(self, gamespace_id):
+    async def get_access(self, gamespace_id):
         
         try:
-            access = yield self.__get_access_data__(gamespace_id)
+            access = await self.__get_access_data__(gamespace_id)
         except NoAccessData:
-            raise Return(AccessAdapter({}))
+            return AccessAdapter({})
 
-        raise Return(access)
+        return access
 
-    @coroutine
-    def set_access(self, gamespace_id, access_private, access_protected, access_public):
+    async def set_access(self, gamespace_id, access_private, access_protected, access_public):
 
         data_private = "\n".join(access_private)
         data_protected = "\n".join(access_protected)
         data_public = "\n".join(access_public)
 
         try:
-            yield self.__get_access_data__(gamespace_id)
+            await self.__get_access_data__(gamespace_id)
         except NoAccessData:
-            yield self.db.insert(
+            await self.db.insert(
                 """
                     INSERT INTO `gamespace_access`
                     (gamespace_id, access_private, access_protected, access_public)
@@ -91,7 +86,7 @@ class ProfileAccessModel(Model):
                 data_public, cache_hash=('profile_access', gamespace_id))
 
         else:
-            yield self.db.execute(
+            await self.db.execute(
                 """
                     UPDATE `gamespace_access`
                     SET `access_private`=%s, `access_protected`=%s, `access_public`=%s
@@ -99,22 +94,21 @@ class ProfileAccessModel(Model):
                 """, data_private, data_protected, data_public,
                 gamespace_id, cache_hash=('profile_access', gamespace_id))
 
-    @coroutine
-    def validate_access(self, gamespace_id, fields, operation):
+    async def validate_access(self, gamespace_id, fields, operation):
 
-        access = yield self.get_access(gamespace_id)
+        access = await self.get_access(gamespace_id)
 
         if operation == ProfileAccessModel.READ:
 
             private = access.get_private()
             result = list(set(fields) - set(private))
-            raise Return(result)
+            return result
 
         elif operation == ProfileAccessModel.READ_OTHERS:
 
             public = access.get_public()
             result = list(set(public) & set(fields))
-            raise Return(result)
+            return result
 
         elif operation == ProfileAccessModel.WRITE:
 
