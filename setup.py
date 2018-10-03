@@ -7,6 +7,9 @@ DEPENDENCIES = [
 
 setup(
     name='anthill-profile',
+    package_data={
+      "anthill.profile": ["anthill/profile/sql", "anthill/profile/static"]
+    },
     setup_requires=["pypigit-version"],
     git_version="0.1.0",
     description='User profiles service for Anthill platform',
