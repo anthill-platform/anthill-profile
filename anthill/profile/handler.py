@@ -75,7 +75,7 @@ class InternalHandler(object):
     async def get_profile_others(self, gamespace_id, account_id, path=""):
         profiles = self.application.profiles
 
-        path = filter(bool, path.split("/")) if path is not None else None
+        path = list(filter(bool, path.split("/"))) if path is not None else None
 
         try:
             result = await profiles.get_profile_others(
@@ -194,7 +194,7 @@ class ProfileUserHandler(handler.AuthenticatedHandler):
 
         gamespace_id = self.current_user.token.get(access.AccessToken.GAMESPACE)
 
-        path = filter(bool, path.split("/")) if path is not None else None
+        path = list(filter(bool, path.split("/"))) if path is not None else None
 
         try:
             profile = await profiles.get_profile_others(gamespace_id, account_id, path)
