@@ -168,7 +168,7 @@ class ProfilesModel(Model):
             # if the path is not specified, get them all
             valid_keys = await self.access.validate_access(
                 gamespace_id,
-                profile_data.keys(),
+                list(profile_data.keys()),
                 ProfileAccessModel.READ)
 
             result = {
@@ -198,7 +198,7 @@ class ProfilesModel(Model):
             # if the path is not specified, get them all
             valid_keys = await self.access.validate_access(
                 gamespace_id,
-                profile_data.keys(),
+                list(profile_data.keys()),
                 ProfileAccessModel.READ_OTHERS)
 
             result = {
@@ -286,7 +286,7 @@ class ProfilesModel(Model):
         if not path:
             await self.access.validate_access(
                 gamespace_id,
-                fields.keys(),
+                list(fields.keys()),
                 ProfileAccessModel.WRITE)
 
             result = await self.set_profile_data(gamespace_id, account_id, fields, path, merge=merge)
