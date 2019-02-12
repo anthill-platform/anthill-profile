@@ -126,7 +126,7 @@ class ProfileMeHandler(handler.AuthenticatedHandler):
         gamespace_id = self.current_user.token.get(
             access.AccessToken.GAMESPACE)
 
-        path = filter(bool, path.split("/")) if path is not None else None
+        path = list(filter(bool, path.split("/"))) if path is not None else None
 
         if self.token.has_scope("profile_private"):
             method = profiles.get_profile_data
@@ -153,7 +153,7 @@ class ProfileMeHandler(handler.AuthenticatedHandler):
         gamespace_id = self.current_user.token.get(
             access.AccessToken.GAMESPACE)
 
-        path = filter(bool, path.split("/")) if path is not None else None
+        path = list(filter(bool, path.split("/"))) if path is not None else None
 
         try:
             fields = ujson.loads(self.get_argument("data"))
@@ -211,7 +211,7 @@ class ProfileUserHandler(handler.AuthenticatedHandler):
 
         gamespace_id = self.current_user.token.get(access.AccessToken.GAMESPACE)
 
-        path = filter(bool, path.split("/")) if path is not None else None
+        path = list(filter(bool, path.split("/"))) if path is not None else None
 
         try:
             fields = ujson.loads(self.get_argument("data"))
