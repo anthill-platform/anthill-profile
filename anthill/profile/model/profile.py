@@ -278,7 +278,15 @@ class ProfilesModel(Model):
         try:
             result = await user_profile.set_data(fields, path, merge=merge)
         except FuncError as e:
-            raise ProfileError("Failed to update profie: " + e.message)
+            raise ProfileError("Failed to update profile: " + e.message)
+        return result
+
+    async def set_profiles_data(self, gamespace_id, accounts: dict, merge=True):
+        user_profiles = UserProfiles(self.db, gamespace_id, list(accounts.keys()))
+        try:
+            result = await user_profiles.set_data(accounts, None, merge=merge)
+        except FuncError as e:
+            raise ProfileError("Failed to update profiles: " + e.message)
         return result
 
     async def set_profile_me(self, gamespace_id, account_id, fields, path, merge=True):
@@ -302,9 +310,11 @@ class ProfilesModel(Model):
         return result
 
     async def set_profile_rw(self, gamespace_id, account_id, fields, path, merge=True):
-
         result = await self.set_profile_data(gamespace_id, account_id, fields, path, merge=merge)
+        return result
 
+    async def set_profiles_rw(self, gamespace_id, accounts: dict, merge=True):
+        result = await self.set_profiles_data(gamespace_id, accounts, merge=merge)
         return result
 
 
@@ -366,3 +376,60 @@ class UserProfile(profile.DatabaseProfile):
                 SET `payload`=%s
                 WHERE `account_id`=%s AND `gamespace_id`=%s;
             """, encoded, self.account_id, self.gamespace_id)
+
+
+class UserProfiles(profile.DatabaseProfile):
+    # noinspection PyShadowingNames
+    @staticmethod
+    def __encode_profile__(profile):
+        return ujson.dumps(profile)
+
+    def __init__(self, db, gamespace_id, account_ids):
+        super(UserProfiles, self).__init__(db)
+        self.gamespace_id = gamespace_id
+        self.account_ids = account_ids
+
+    # noinspection PyShadowingNames
+    @staticmethod
+    def __process_dates__(profile):
+        if ProfilesModel.TIME_CREATED not in profile:
+            profile[ProfilesModel.TIME_CREATED] = access.utc_time()
+
+        profile[ProfilesModel.TIME_UPDATED] = access.utc_time()
+
+    async def get(self):
+        users = await self.conn.query(
+            """
+                SELECT `payload`, `account_id`
+                FROM `account_profiles`
+                WHERE `account_id` IN %s AND `gamespace_id`=%s
+                FOR UPDATE;
+            """, self.account_ids, self.gamespace_id)
+
+        return {
+            str(user["account_id"]): user["payload"]
+            for user in users
+        }
+
+    async def insert(self, data):
+        # not supported since get never returns NoDataError
+        pass
+
+    async def update(self, data: dict):
+        for account_id, account_profile in data.items():
+            UserProfiles.__process_dates__(account_profile)
+
+        values = []
+        entries = []
+
+        for account_id, account_profile in data.items():
+            values.append("(%s, %s, %s)")
+            entries.extend([account_id, self.gamespace_id,
+                            UserProfiles.__encode_profile__(account_profile)])
+
+        await self.conn.execute(
+            """
+                REPLACE INTO `account_profiles`
+                (`account_id`, `gamespace_id`, `payload`)
+                VALUES {0};
+            """.format(", ".join(values)), *entries)

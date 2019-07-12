@@ -272,3 +272,26 @@ class MassProfileUsersHandler(handler.AuthenticatedHandler):
             raise HTTPError(400, "Failed to get profiles: " + e.message)
         else:
             self.dumps(profiles)
+
+    @scoped(scopes=["profile", "profile_write", "profile_multi"])
+    async def post(self):
+        profiles_data = self.application.profiles
+        gamespace_id = self.current_user.token.get(access.AccessToken.GAMESPACE)
+
+        try:
+            profiles = ujson.loads(self.get_argument("data"))
+            profiles = validate_value(profiles, "json_dict_of_dicts")
+        except (KeyError, ValueError, ValidationError):
+            raise HTTPError(400, "Corrupted 'data' field: expecting JSON object of JSON objects.")
+
+        merge = self.get_argument("merge", True)
+
+        try:
+            result = await profiles_data.set_profiles_rw(gamespace_id, profiles, merge=merge)
+
+        except ProfileError as e:
+            raise HTTPError(400, str(e))
+        except AccessDenied as e:
+            raise HTTPError(403, str(e))
+        else:
+            self.dumps(result)
