@@ -52,8 +52,8 @@ class ProfileQuery(object):
     async def query(self, one=False, count=False):
         try:
             conditions, data = self.__values__()
-        except ConditionError:
-            raise ProfileQueryError("Failed to process profile conditions")
+        except ConditionError as e:
+            raise ProfileQueryError("Failed to process profile conditions: {0}".format(str(e)))
 
         query = """
             SELECT {0} `account_id`, `payload` FROM `account_profiles`
